@@ -244,7 +244,7 @@ void RKPClass::SendToPanel(byte* r, int nLen)
 void RKPClass::SendToPanelEx(byte* r, int len)
 {
   digitalWrite(LED_Stat, HIGH);
-  timeToSwitchOffLed = millis() + 1000;
+  timeToSwitchOffLed = millis() + 50;
 
 //cli(); //Interrupts Must be enabled - or only 4 or so bytes send without error
   //Serial1.write(r,nLen);
