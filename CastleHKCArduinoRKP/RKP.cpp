@@ -196,16 +196,14 @@ void uart_init()
   UCSRA = 0;
   UCSRB = (1 << TXEN) | (1 << RXEN) | (1 << RXCIE);
   UCSRC = /*1<<URSEL |*/ 1 << UCSZ1 | 1 << UCSZ0 ; //1 stop bit 0 parity
-  //9bit
   UCSRB |= (1 << UCSZ2); // Character Size = 9-bit
-  //baud
-  UBRRL =  (unsigned char)UART_BAUD_SELECT(nSerialBaudKP_RX, F_CPU);
-  UBRRH =  (unsigned char)(UART_BAUD_SELECT(nSerialBaudKP_RX, F_CPU) >> 8);
+  UBRRL =  (unsigned char)UART_BAUD_SELECT(nSerialBaudKP_RX, F_CPU); //baud
+  UBRRH =  (unsigned char)(UART_BAUD_SELECT(nSerialBaudKP_RX, F_CPU) >> 8);  //baud
   //enable
   sei();
 }
 
-
+//Puts a byte out on the serial bus. Interrupts must be enabled. If isAddr then Parity1 bit set.
 void uart_putchar(byte c, boolean isAddr)
 {
   loop_until_bit_is_set(UCSR1A, UDRE1); // Wait until data register empty.
@@ -229,10 +227,10 @@ void RKPClass::SendItems()
   {
     SendToPanelEx(_r, _nLen);
     _nLen=0;
-    LogLn("SendItems Sent!!!");
   }
 }
 
+//called from within an interrupt - this saves the send message for when outside the interrupt routine
 void RKPClass::SendToPanel(byte* r, int nLen)
 {
   for(int n=0;n<nLen;n++)
@@ -240,31 +238,26 @@ void RKPClass::SendToPanel(byte* r, int nLen)
   _nLen=nLen;
 }
 
-
+//Actually sends the message
 void RKPClass::SendToPanelEx(byte* r, int len)
 {
   digitalWrite(LED_Stat, HIGH);
   timeToSwitchOffLed = millis() + 50;
 
-//cli(); //Interrupts Must be enabled - or only 4 or so bytes send without error
-  //Serial1.write(r,nLen);
-  //LogLn("[");
+  //Interrupts Must be enabled - or only 4 or so bytes send without error
   if (len > 0)
     uart_putchar(r[0], true);
   for (int n = 1; n < len; n++)
   {
     uart_putchar(r[n], false);
-    //uart_putchar('x', false);
-    //delay(5);
   }
-  //LogLn("]");
-//sei();
 //#if debug_send
-  Log("A");
-  if (RKPID == 0xFF)
-    Log("?");
-  else Log(RKPID);
-  Log(">"); LogHex(r, len);   //Log((b0&0x10)==0?0:1);
+//  Log("A");
+//  if (RKPID == 0xFF)
+//    Log("?");
+//  else
+//    Log(RKPID);
+//  Log(">"); LogHex(r, len);   //Log((b0&0x10)==0?0:1);
 //#endif
 
 }
@@ -276,6 +269,8 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
     byte ics = 0;
     for (int n = 0; n < (nBufLen-1); n++)
       ics += buf[n];
+    if (ics == 0)
+        ics--;
     if (ics != buf[nBufLen - 1])
     {
       Log(F("CS Fail :( "));
@@ -347,10 +342,11 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
       //Log("Screen Updated:"); LogLn((char*)dispBuffer);
       
     }
-    else if (b1 == 0x02)
-    {
-      LogLn("Found Command #2");
-    }
+    //else if (b1 == 0x02)
+    //{
+    //  LogLn("Found Command #2");
+    //  LogHex(buf, 5);
+    //}
     else if (b1 == 0x03)
     {
       /* Command#3 Possibly to light leds or sound buzzer?
@@ -368,6 +364,20 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
       K0 20 00 72 FF FF FF 8F -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:..r....#################
       P  C0 01 0C 53 65 72 76 69 63 65 20 4D 65 6E 75 20 20 20 20 D3 -- -- -- --:@..Service.Menu....S####
       */
+      
+      if (bIsPanelMsg)
+      { 
+        //NO RED: D0 03 0F 3F 21
+        //   RED: C0 03 3F 3F 41
+      
+        //LogHex(buf, 5);
+        byte b = (buf[2]& 0x30);
+        if (b == 0x00) LogLn("No Alarm");
+        if (b == 0x30) LogLn("Alarm!!!!");
+        if (b == 0x10) LogLn("?1?");
+        if (b == 0x20) LogLn("?2?");
+      }
+      
       byte addr = (b0 & 0x0f);
       if (addr == RKPID)
       { //ONLY RKP0 will reply to this
@@ -379,11 +389,46 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
         bSent=true;
       }
     }
-    else if (b1 == 0x04)
+    else if (b1 == 0x02 || b1 == 0x04 || b1 == 0x0C || b1 == 0x0D || b1 == 0x0E )
     {
-      LogLn("Found Command #4");
+      //P C0 04 08 00 CC -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:@...L###################
+      //K 00 04 04 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
+      //P D0 0C 10 EC -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:P..l####################
+      //K 10 0C 1C -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
+      //P 90 0D 07 A4 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...$####################
+      //K 10 0D 1D -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
+      //P C0 02 00 C2 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:@..B####################
+      //K 00 02 02 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
+      //P C0 0E 01 CF -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:@..O####################
+      //K 00 0E 0E -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
+
+
+      byte addr = (b0 & 0x0f);
+      if (addr == RKPID)
+      { //Possibly ONLY RKP0 will reply to this
+        byte r[3];
+        r[0] = b0 & 0x3F;  //keep bit5&6(Counter)  C0 respond 0x00; D0 respond 0x10 & address
+        r[1] = b1;
+        r[2] = r[0] + r[1];
+        SendToPanel(r, 3);
+        bSent=true;
+      }
+    }
+    else if (b1 == 0x07)
+    {//handled below in if (bIsPanelMsg) block
+    }
+    else
+    {
+      //Log("P Found Command #"); LogLn(b1);
+      Log("P "); LogHex(buf, nBufLen);
     }
   }
+  else if (b1!=0 && b1!=1 && b1!=2 && b1!=3 && b1!=4 && b1!=6 && b1!=7 && b1!=0x0C && b1!=0x0D && b1!=0x0E)
+  {
+      //Log("K Found Command #"); LogLn(b1);
+      Log("K ");LogHex(buf, nBufLen);
+  }
+  
   //These commands dont need a valid RKPID
   if (bIsPanelMsg)
   {
@@ -462,7 +507,7 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
       }
 
     }
-    else if (b1 == 0x07 && bWaitingNewID == true)
+    else if (b1 == 0x07 /*&& bWaitingNewID == true*/)
     {
       /* Command#7: Assign ID
       P  9F 07 01 41 C7 08 01 B8 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...AG..8################  //Panel sends      9F          07         01 41 C7 08 01  //Assign 01 to RKP
@@ -504,14 +549,6 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
     }
 
   }//#if is from panel
-
-
-  //if (bSent == true)
-  //{
-  //  digitalWrite(LED_Stat, HIGH);
-  //  timeToSwitchOffLed = millis() + 50;
-  //  //LogLn("Sent!"); LogHex(buf,nBufLen);
-  //}
 
   return true;
 }
@@ -565,6 +602,7 @@ ISR(USART1_RX_vect)
       else if (b1 == 0x07)  msglen = 8; //P  9F 07 01 41 C7 08 01 B8 //assign id
       else if (b1 == 0x0C)  msglen = 4; //P  00 0C 0C    D0 0C 0C E8  //When you press 0 - screen clears?
       else if (b1 == 0x0D)  msglen = 4; //P  D0 0D FF DC  //on entering eng mode
+      else if (b1 == 0x0E)  msglen = 4; //P  C0 0E 01 CF  //on unsetting   (comms fault.bat fault)
       else if (b1 == 0x0F)  msglen = 5; //P C0 0F 00 3F 0E   Leaving eng mode
       else
       {
@@ -584,6 +622,7 @@ ISR(USART1_RX_vect)
       else if (b1 == 0x07)  msglen = 4; //K1 11 07 00 18
       else if (b1 == 0x0C)  msglen = 3; //K1 C0 0C 0C D8  //When you press 0 - screen clears
       else if (b1 == 0x0D)  msglen = 3; //K1 10 0D 1D  //on entering eng mode
+      else if (b1 == 0x0E)  msglen = 3; //P  00 0E 0E  //on unsetting
       else if (b1 == 0x0F)  msglen = 3; //K1 00 0F 0F Leaving eng mode
       else
       {
@@ -594,11 +633,10 @@ ISR(USART1_RX_vect)
   }
   bufix += 1;
 
-  //Log(bufix);Log("=");LogLn(msglen);
   if (bufix == msglen)
   { //complete message
     RKPClass::HKCReplyToPanel(buf, bufix);
-    Log(bIsPanelMsg ? "P " : "K "); LogHex(buf, bufix);
+    //]]Log(bIsPanelMsg ? "P " : "K "); LogHex(buf, bufix);
     bufix = 0;
     msglen = 0;
   }
