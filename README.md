@@ -21,6 +21,11 @@ No libraries are required - just a standard Arduino IDE installation.
 
 The circuit required to be made is in the HowTo Notes Folder.
 
-The status of this project is being blogged on www.boards.ie
+See Config.h for any settings - such as email address to alert etc.
 
-April 2015
+Tested on Uno and Leonardo.
+Note: UNO runs fine - but only Leonardo can Debug Log to Console.
+
+The status of this project is being blogged at http://www.boards.ie/vbulletin/showthread.php?t=2057113381
+
+June 2015
