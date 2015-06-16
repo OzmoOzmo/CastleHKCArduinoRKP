@@ -28,7 +28,6 @@
 
 #ifndef QUIET
 
-
 	#define nSerialBaudDbg 115200
 
 	#define Log(x) Serial.print(x)

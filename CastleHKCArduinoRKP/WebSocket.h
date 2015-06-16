@@ -13,19 +13,22 @@ class WebSocket
 {
 	public:
 		// Create a Websocket server
-		void static WebSocket_EtherInit(IPAddress ip, IPAddress gateway);
-
-		//Send something to connected browser
+		void static WebSocket_EtherInit();
+		
+		void static EtherPoll();
 		bool static WebSocket_send(char* data, byte length);
 
-		void static WebSocket_doHandshake();
-
-		byte static ReadNext();
-		bool static RejectBroswerMsg();
-		bool static WebSocket_getFrame();
-		void static EtherPoll();
+                static char htmlline[];   //Temp buffer for SHA, Base64 etc.
+                static char key[];
+                static int base64_encode(char *output, char *input, int inputLen);
+                
 	private:
+		void static WebSocket_doHandshake();
+		//Send something to connected browser
+		byte static ReadNext();
+		bool static WebSocket_getFrame();
 		void static SendHTMLSite();
+                static inline void a3_to_a4(unsigned char * a4, unsigned char * a3);
 };
 
 #endif /* WEBSOCKET_H_ */

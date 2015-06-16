@@ -25,7 +25,6 @@
 #include "WebSocket.h"
 #include "SMTP.h"
 #else
-#include "Base64.h"
 #include "Config.h"
 #include "Log.h"
 #include "RKP.h"
@@ -44,32 +43,30 @@
 #define ledFeedback 12
 int tiLast = 0;
 
-const char* sEmail = EMAIL;
 
 void setup()
 {
   //--debug logging start
   Log_Init();
+  //while (!Serial) {;} // wait for serial port to connect. Needed for Leonardo only
+  
+  //--Create Web Server
+  LogLn(F("\r\n-----[Start]-----"));
 
   //--Keypad start interrupt service
   RKPClass::Init();
 
-  //--Create Web Server
-  LogLn(F("\r\n-----[Start]-----"));
-  WebSocket::WebSocket_EtherInit(
-    IPAddress( IP_A, IP_B, IP_C, IP_D ),	//Give the device a unique IP
-    IPAddress( IP_A, IP_B, IP_C, 1 )        //Gateway (your Router)
-  );
+  WebSocket::WebSocket_EtherInit();
 
-  SMTP::Init(IPAddress( SMTP_IP_A, SMTP_IP_B, SMTP_IP_C, SMTP_IP_D ), sEmail);
+  SMTP::Init();
 
-  Log_ShowMem();
+  SMTP::QueueEmail(START);
 }
 
 void loop()
 {
   while (true)
-  {
+  {  
     //Flash status led
     int tiNow = millis();
     if (tiLast < tiNow - 500)

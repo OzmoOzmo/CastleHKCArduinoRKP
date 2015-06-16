@@ -67,7 +67,9 @@ bit 0	UCPOL0	USART Clock Polarity. Set to transmit on falling edge and sample on
 
 #define UART_BAUD_SELECT(baudRate,xtalCpu)  (((xtalCpu) + 8UL * (baudRate)) / (16UL * (baudRate)) -1UL)
 
-//Translations for Leonardo.
+
+#ifdef UCSR1A
+/////////////Translations for Leonardo////////////
 #define UCSRA UCSR1A
 #define UCSRB UCSR1B
 #define UBRRH UBRR1H
@@ -121,14 +123,66 @@ bit 0	UCPOL0	USART Clock Polarity. Set to transmit on falling edge and sample on
 #define UPM1 UPM11 //5
 #define UMSEL0 UMSEL10 //6
 #define UMSEL1 UMSEL11 //7
+#else
+/////////////UNO etc///////////
 
+#define UCSRA UCSR0A
+#define UCSRB UCSR0B
+#define UBRRH UBRR0H
+#define UBRRL UBRR0L
+
+#define UCPOL UCPOL0
+#define UCSZ0 UCSZ00
+#define UCSZ1 UCSZ01
+#define USBS USBS0
+#define UPM0 UPM00
+#define UPM1 UPM01
+#define UMSEL0 UMSEL00
+#define UMSEL1 UMSEL01
+
+#define UCSRA UCSR0A //_SFR_MEM8(0xC8)
+#define MPCM MPCM0 //0
+#define U2X U2X0 //1
+#define UPE UPE0 //2
+#define DOR DOR0 //3
+#define FE FE0 //4
+#define UDRE UDRE0 //5
+#define TXC TXC0 //6
+#define RXC RXC0 //7
+
+#define UCSRB UCSR0B //_SFR_MEM8(0xC9)
+#define TXB8 TXB80 //0
+#define RXB8 RXB80 //1
+#define UCSZ2 UCSZ02 //2
+#define TXEN TXEN0 //3
+#define RXEN RXEN0 //4
+#define UDRIE UDRIE0 //5
+#define TXCIE TXCIE0 //6
+#define RXCIE RXCIE0 //7
+
+#define UDR UDR0 //_SFR_MEM8(0xCE)
+#define UDR_0 UDR0_0 //0
+#define UDR_1 UDR0_1 //1
+#define UDR_2 UDR0_2 //2
+#define UDR_3 UDR0_3 //3
+#define UDR_4 UDR0_4 //4
+#define UDR_5 UDR0_5 //5
+#define UDR_6 UDR0_6 //6
+#define UDR_7 UDR0_7 //7
+
+#define UCSRC UCSR0C //_SFR_MEM8(0xCA)
+#define UCPOL UCPOL0 //0
+#define UCSZ0 UCSZ00 //1
+#define UCSZ1 UCSZ01 //2
+#define USBS USBS0 //3
+#define UPM0 UPM00 //4
+#define UPM1 UPM01 //5
+#define UMSEL0 UMSEL00 //6
+#define UMSEL1 UMSEL01 //7
+#endif
 
 #define nSerialBaudKP_RX 1658
 #define ixMaxPanel 40	//40 bytes enough
-
-
-const char PROGMEM allmonths[] = {"JANFEBMARAPRMAYJUNJULAUGSEPOCTNOVDEC"};
-const char PROGMEM alldays[] = {"SUNMONTUEWEDTHUFRISAT"};
 
 bool RKPClass::dateFlash = true;
 bool RKPClass::mbIsPanelWarning = false;
@@ -136,7 +190,7 @@ bool RKPClass::mbIsPanelAlarm = false;
 volatile bool RKPClass::bScreenHasUpdated = false;
 
 volatile int RKPClass::_nLen=0;
-byte RKPClass::_r[10];
+byte RKPClass::_r[10]; //the reply buffer
 
 unsigned long RKPClass::timeToSwitchOffLed = 0;
 
@@ -152,7 +206,7 @@ static byte RKPSerial[] = {0x41, 0xC7, 0x08};
 
 
 #define DISP_BUF_LEN 16+1+2		//16 characters - space - AW (will be followed by a Terminator 0)
-volatile byte RKPClass::dispBuffer[DISP_BUF_LEN + 1];
+volatile byte RKPClass::dispBuffer[DISP_BUF_LEN + 1]="Not Connected";
 
 
 byte MapKey(char c)
@@ -206,20 +260,19 @@ void uart_init()
 //Puts a byte out on the serial bus. Interrupts must be enabled. If isAddr then Parity1 bit set.
 void uart_putchar(byte c, boolean isAddr)
 {
-  loop_until_bit_is_set(UCSR1A, UDRE1); // Wait until data register empty.
+  loop_until_bit_is_set(UCSRA, UDRE); // Wait until data register empty.
 
   if (isAddr)
-    UCSR1B |= (1 << TXB81);
+    UCSRB |= (1 << TXB8);
   else
-    UCSR1B &= ~(1 << TXB81);
-  UDR1 = c;
+    UCSRB &= ~(1 << TXB8);
+  UDR = c;
 
 }
 
 RKPClass::RKPClass()
 {
 }
-
 
 void RKPClass::SendItems()
 {
@@ -259,7 +312,6 @@ void RKPClass::SendToPanelEx(byte* r, int len)
 //    Log(RKPID);
 //  Log(">"); LogHex(r, len);   //Log((b0&0x10)==0?0:1);
 //#endif
-
 }
 
 
@@ -320,7 +372,6 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
       P  C0 01 20 54 75 65 20 32 37 20 4A 61 6E 20 32 30 BA 30 39 76 -- -- -- --:@..Tue.27.Jan.20:09v####
       K0 00 01 01 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
       */
-      // C0:1100,0000    D0:1101,0000     A1: 1010,0001   but Not 9 10010001
       byte addr = (b0 & 0x30) >> 4;
       if (RKPID == 0x00)
       { //RKP0 only ever responds
@@ -332,24 +383,21 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
         bSent=true;
       }
       //Make a note to send it to the Mobile Phone
-      for(int n=0;n<DISP_BUF_LEN;n++)
-        dispBuffer[n]=buf[n+3];
-      dispBuffer[DISP_BUF_LEN]=0;        
-      dispBuffer[DISP_BUF_LEN-1]=0;
-      dispBuffer[DISP_BUF_LEN-2]=0;
+      dispBuffer[0]=RKPClass::mbIsPanelAlarm?'A':' ';
+      dispBuffer[1]=RKPClass::mbIsPanelWarning?'W':' ';
+      dispBuffer[2]=' ';   //always space
+      int n=0;
+      for(;n<16;n++)  //always 16 characters
+        dispBuffer[n+3]=buf[n+3];
+      //dispBuffer[n]=0;
+      
       bScreenHasUpdated=true;
       
       //Log("Screen Updated:"); LogLn((char*)dispBuffer);
-      
     }
-    //else if (b1 == 0x02)
-    //{
-    //  LogLn("Found Command #2");
-    //  LogHex(buf, 5);
-    //}
     else if (b1 == 0x03)
     {
-      /* Command#3 Possibly to light leds or sound buzzer?
+      /* Command#3 light leds or sound buzzer? We can use this to monitor alarm status
       Green and Red were lit
       P  C0 03 33 3F 35 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:@.3?5###################
       K0 00 03 03 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
@@ -372,10 +420,26 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
       
         //LogHex(buf, 5);
         byte b = (buf[2]& 0x30);
-        if (b == 0x00) LogLn("No Alarm");
-        if (b == 0x30) LogLn("Alarm!!!!");
-        if (b == 0x10) LogLn("?1?");
-        if (b == 0x20) LogLn("?2?");
+        if (b == 0x00)
+        {
+          if (RKPClass::mbIsPanelAlarm == true)
+          {
+            LogLn("Alarm Cleared");
+            RKPClass::mbIsPanelAlarm = false;
+          }
+        }
+        else 
+        //if (b == 0x30)
+        //if (b == 0x10) LogLn("?1?");
+        //if (b == 0x20) LogLn("?2?");
+        {
+          if (RKPClass::mbIsPanelAlarm == false)
+          {
+             RKPClass::mbIsPanelAlarm = true;
+             LogLn("Alarm!!!!");
+             SMTP::QueueEmail(ALARM);
+          }
+        }
       }
       
       byte addr = (b0 & 0x0f);
@@ -390,7 +454,7 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
       }
     }
     else if (b1 == 0x02 || b1 == 0x04 || b1 == 0x0C || b1 == 0x0D || b1 == 0x0E )
-    {
+    {//These are commands we dont need to implement - they all require the same ack to be sent
       //P C0 04 08 00 CC -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:@...L###################
       //K 00 04 04 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
       //P D0 0C 10 EC -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:P..l####################
@@ -401,7 +465,6 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
       //K 00 02 02 -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
       //P C0 0E 01 CF -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:@..O####################
       //K 00 0E 0E -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- -- --:...#####################
-
 
       byte addr = (b0 & 0x0f);
       if (addr == RKPID)
@@ -423,8 +486,8 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
       Log("P "); LogHex(buf, nBufLen);
     }
   }
-  else if (b1!=0 && b1!=1 && b1!=2 && b1!=3 && b1!=4 && b1!=6 && b1!=7 && b1!=0x0C && b1!=0x0D && b1!=0x0E)
-  {
+  else if (b1>7 && b1!=0x0C && b1!=0x0D && b1!=0x0E)
+  {//Some command we havnt seen before.
       //Log("K Found Command #"); LogLn(b1);
       Log("K ");LogHex(buf, nBufLen);
   }
@@ -432,7 +495,6 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
   //These commands dont need a valid RKPID
   if (bIsPanelMsg)
   {
-    //
     if (b1 == 0x05)
     {
       /* scanning start - 3 devices all logs ON
@@ -483,7 +545,7 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
         //if (addr == 0x0f)
         { //ACK
           byte r[8];
-          r[0] = 0x1F;  //Always the Global address          15    //Sometimes this is 0x1F ????????????why??
+          r[0] = 0x1F;  //Always the Global address          15    //Sometimes this is 0x1F ?why?
           r[1] = b1;    //repeat command                      6
           r[2] = RKPSerial[0];  ///Our Unique ID (lBf)       41
           r[3] = RKPSerial[1];  //                           C7
@@ -557,6 +619,8 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
 ISR(UART1_RX_vect)
 #elif defined(USART1_RX_vect)
 ISR(USART1_RX_vect)
+#elif defined(USART_RX_vect)
+ISR(USART_RX_vect) //UNO has no Serial1
 #else
 #error "Don't know what the Data Register Empty vector is called for Serial1"
 #endif
@@ -600,6 +664,10 @@ ISR(USART1_RX_vect)
       else if (b1 == 0x05)  msglen = 3; //P  D0 05 D5      All devices enter scan mode
       else if (b1 == 0x06)  msglen = 3; //P  8F 06 95      Scan Next
       else if (b1 == 0x07)  msglen = 8; //P  9F 07 01 41 C7 08 01 B8 //assign id
+      //?
+      //?
+      //?
+      //?
       else if (b1 == 0x0C)  msglen = 4; //P  00 0C 0C    D0 0C 0C E8  //When you press 0 - screen clears?
       else if (b1 == 0x0D)  msglen = 4; //P  D0 0D FF DC  //on entering eng mode
       else if (b1 == 0x0E)  msglen = 4; //P  C0 0E 01 CF  //on unsetting   (comms fault.bat fault)
@@ -620,6 +688,11 @@ ISR(USART1_RX_vect)
       else if (b1 == 0x05)  msglen = 0; //No response ever given
       else if (b1 == 0x06)  msglen = 7; //K1 0F 06 41 C7 08 01 26  (scan response)
       else if (b1 == 0x07)  msglen = 4; //K1 11 07 00 18
+      //?
+      //?
+      //?
+      //?
+      //?
       else if (b1 == 0x0C)  msglen = 3; //K1 C0 0C 0C D8  //When you press 0 - screen clears
       else if (b1 == 0x0D)  msglen = 3; //K1 10 0D 1D  //on entering eng mode
       else if (b1 == 0x0E)  msglen = 3; //P  00 0E 0E  //on unsetting
@@ -643,57 +716,6 @@ ISR(USART1_RX_vect)
 }
 
 
-
-#if _OFF
-     //each byte is about 5mS
-      static unsigned int V_PNL = 0, V_RKP0 = 0, V_RKP1 = 0, V_RKP2 = 0;
-      int nV = analogRead(A0) / 8;
-        //Serial.print(nV,HEX);Log(" ");
-        if (nV > 0x30) //data HIGH
-        {
-          if (nV > 0x60)      //actually 0x69
-            V_PNL++;
-          else if (nV > 0x4C) //actually 0x4E 0x4D
-            V_RKP0++;
-          else if (nV > 0x47) //actually 0x48 0x49
-            V_RKP1++;
-          else
-            V_RKP2++;
-        }
-      }
-      Log(V_PNL > V_RKP0 ? "P  " :  V_RKP0 > V_RKP1 ? "K0 " :  V_RKP1 > V_RKP2 ? "K1 " : "K2 "); LogHex(buf, bufix);
-      V_PNL = V_RKP0 = V_RKP1 = V_RKP2 = 0;
-      }
-      //Knock off the "We Sent To Panel" Led not less than 100ms after we turn it on
-      if (timeToSwitchOffLed != 0 && millis() > timeToSwitchOffLed)
-      {
-        timeToSwitchOffLed = 0;
-        digitalWrite(LED_Stat, LOW);
-      }
- 
-
-        if (idDev == mdevID)
-        {
-          bool bAck = (msgbuf[0] & 0x04) != 0;	//required for good comms
-          SendToPanel(mdevID, bAck);
-          DisplayScreen(msgbuf, msgbufLen); //try display what device 0 sees
-          //LogLn(F("-OK-"));
-        }
-
-        { //Send Email if alarm lights come on
-          bool bIsPanelWarning = (msgbuf[1] & 0x04) != 0;
-          if (bIsPanelWarning == true && RKPClass::mbIsPanelWarning == false)
-            SMTP::QueueEmail();
-          RKPClass::mbIsPanelWarning = bIsPanelWarning;
-
-          bool bIsPanelAlarm = (msgbuf[1] & 0x02) != 0;
-          if (bIsPanelAlarm == true && RKPClass::mbIsPanelAlarm == false)
-            SMTP::QueueEmail();
-          RKPClass::mbIsPanelAlarm = bIsPanelAlarm;
-        }
-#endif
-
-
 char RKPClass::PopKeyPress()
 {
   return (char)fifo.pop();
@@ -708,10 +730,8 @@ void RKPClass::PushKey( char key )
 void RKPClass::SendDisplayToClientIfChanged()
 {
   bScreenHasUpdated = false;    //possible issue if interrupt has changed this since we checked it - might miss one screen update
-  //LogHex((byte*)dispBuffer,16);
-  //cli();
-  WebSocket::WebSocket_send((char*)dispBuffer, 16);
-  //sei();
+  //LogHex((byte*)dispBuffer,18);
+  WebSocket::WebSocket_send((char*)dispBuffer, DISP_BUF_LEN);
   //Log("Sent:"); LogLn((char*)dispBuffer);
 }
 
@@ -721,7 +741,6 @@ void RKPClass::Init()
   uart_init();  //adjust for 9bits
 
   //HKC Init
-  dispBuffer[16] = '|';
   dispBuffer[DISP_BUF_LEN] = 0;
   pinMode(LED_Stat, OUTPUT);
   bIsScanning = -1;
