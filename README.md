@@ -6,7 +6,7 @@ accessible via any desktop or modern mobile phone browser.
 
 Currently working. More features being added.
 
-!(http://www.boards.ie/vbulletin/attachment.php?attachmentid=302051)
+![animation](http://www.boards.ie/vbulletin/attachment.php?attachmentid=302051)
 
 This project allows you to remote arm/disarm the panel as well as view logs etc.
 Basically everything that can be done from the real keypad.
