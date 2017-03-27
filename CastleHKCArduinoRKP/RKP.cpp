@@ -420,7 +420,7 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
       
         //LogHex(buf, 5);
         byte b = (buf[2]& 0x30);
-        if (b == 0x00)
+        if (b == 0x00) //Red Led off
         {
           if (RKPClass::mbIsPanelAlarm == true)
           {
@@ -428,10 +428,7 @@ bool RKPClass::HKCReplyToPanel(byte* buf, int nBufLen)
             RKPClass::mbIsPanelAlarm = false;
           }
         }
-        else 
-        //if (b == 0x30)
-        //if (b == 0x10) LogLn("?1?");
-        //if (b == 0x20) LogLn("?2?");
+        else if (b == 0x30) //Red Led Full On (also 0x20 is Partset blinking mode)
         {
           if (RKPClass::mbIsPanelAlarm == false)
           {
